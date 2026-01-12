@@ -1,9 +1,7 @@
-import express from 'express';
+import { ChatOllama } from "@langchain/ollama";
+const model = new ChatOllama({
+  model: "llama3.1",
+});
 
-const app = express();
-app.use(express.json())
-
-app.get('/',async(req,res)=>{
-
-})
-app.listen(4000,()=>console.log("server is up"))
+const res = await model.invoke("Say hello in one line");
+console.log(res.content);

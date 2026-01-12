@@ -1,131 +1,102 @@
-import dotenv from "dotenv";
-dotenv.config();
-
-
 import "dotenv/config";
-import { ChatOpenAI } from "@langchain/openai";
-import {
-  SystemMessage,
-  HumanMessage,
-  AIMessage
-} from "@langchain/core/messages";
+import { OllamaEmbeddings } from "@langchain/ollama";
+import { SystemMessage, HumanMessage, AIMessage } from "@langchain/core/messages";
+import { MemoryVectorStore } from "@langchain/classic/vectorstores/memory";
+import { ChatOllama } from "@langchain/ollama";
 
-const max_msg = 4
+const max_msg = 4;
 
-
-const model = new ChatOpenAI({
-  model: "gpt-4o-mini",
+const model = new ChatOllama({
+  model: "llama3.1",
   temperature: 0,
 });
 
 
-let chatMemory = [];
+const embeddings = new OllamaEmbeddings({
+  model: "nomic-embed-text",
+});
 
-const summarizeMessage = async (messages) => {
-  const summarizerPrompt = [
-    new SystemMessage(`
-      "You are a memory manager.
-         Rules:
-      -  This is ground truth. Do not hallucinate.
-      - NEVER delete existing values unless explicitly contradicted 
-      - If a value is missing in new messages, keep the old value
-      - Only update fields if new information is clearly stated
-      - Output ONLY valid JSON
-      Maintain a JSON object like the following fields:
-      {
-        "name": string ,
-        "age": number ,
-        
-      }
-    "`
+const vectorStore = await MemoryVectorStore.fromTexts([], [], embeddings);
 
-    ),
-    ...messages,
-  ];
-
-  const response = await model.invoke(summarizerPrompt)
-
-  return response.content;
+async function saveToMemory(text, metadata = {}) {
+  await vectorStore.addDocuments([
+    {
+      pageContent: text,
+      metadata,
+    },
+  ]);
+  console.log("Stored memory:", text);
 }
 
-chatMemory.push(new SystemMessage('You are a helpful chatbot. Remember what the user tells you.'));
+async function maybeSaveToMemory(memory) {
+  if (!memory) return;
 
+  const text = typeof memory === "string" ? memory : JSON.stringify(memory);
 
-// capped memory****************
+  await saveToMemory(text);
+}
 
-// const invokeModel = async (userMessage) => {
+async function decideMemory(userMessage) {
+  const response = await model.invoke([
+    new SystemMessage(`
+You are a memory extraction system.
 
-//   // 1. store user message
-//   chatMemory.push(new HumanMessage(userMessage));
+Rules:
+- Output ONLY valid JSON
+- Do NOT explain anything
+- Do NOT add text before or after JSON
+- If no memory is found, output: null
+- Always add a field shouldStore in the json a boolean value to determine the value should store or not
 
+Allowed JSON formats:
+{ "name": string }
+{ "age": number }
+null
+    `),
+    new HumanMessage(userMessage),
+  ]);
 
-//   const systemMessage = chatMemory[0];
-//   const recentMessages = chatMemory.slice(-max_msg)
-//   console.log(recentMessages);
+  try {
+    return JSON.parse(response.content);
+  } catch {
+    return null;
+  }
+}
 
-//   chatMemory = [];
-//   chatMemory.push(systemMessage, ...recentMessages)
-//   debugger
-
-//   // 2. call the model with FULL memory
-//   const response = await model.invoke(chatMemory);
-
-//   chatMemory.push(new AIMessage(response.content));
-
-//   // 4. return reply
-//   return response.content;
-// }
-
-
-
+async function retrieveMemory(query) {
+  const retriever = vectorStore.asRetriever(3);
+  return await retriever.invoke(query);
+}
 
 const invokeModel = async (userMessage) => {
+  try {
+    const memoryDecision = await decideMemory(userMessage);
+    if (memoryDecision?.shouldStore) {
+      const res = await maybeSaveToMemory(memoryDecision.content, {
+        type: "user_memory",
+      });
+    }
+    const relevantMemory = await retrieveMemory(userMessage);
+    debugger;
 
-  // 1. store user message
-  chatMemory.push(new HumanMessage(userMessage));
+    const memoryText = relevantMemory.map((m) => `- ${m.pageContent}`).join("\n");
 
-  // Separate system summary and others
-  const systemMessage = chatMemory.find(
-    (msg) => msg instanceof SystemMessage
-  );
+    const messages = [
+      new SystemMessage(`You are a helpful chatbot.
+Use the memory below ONLY if relevant.
 
+Memory:
+${memoryText || "None"}
+    `),
+      new HumanMessage(userMessage),
+    ];
 
-
-  const nonSystemMessages = chatMemory.filter(
-    (msg) => !(msg instanceof SystemMessage)
-  );
-
-  // 🔥 SUMMARIZE OLD MESSAGES
-  if (nonSystemMessages.length > max_msg) {
-    const oldMessages = nonSystemMessages.slice(
-      0,
-      nonSystemMessages.length - max_msg
-    );
-
-    const Conversation_tillNowSummary = [systemMessage,...oldMessages]
-
-    const summary = await summarizeMessage(Conversation_tillNowSummary);
-    debugger
-    // Replace system message with updated summary
-    chatMemory = [];
-    chatMemory.push(
-      new SystemMessage(`Conversation summary: ${summary}`),
-      ...nonSystemMessages.slice(-max_msg)
-    );
+    const response = await model.invoke(messages);
+    return response.content;
+  } catch (error) {
+    console.log(error);
   }
-
-
-
-  // 2. call the model with FULL memory
-  const response = await model.invoke(chatMemory);
-
-  chatMemory.push(new AIMessage(response.content));
-
-  // 4. return reply
-  return response.content;
-}
-
-
+};
 
 async function run() {
   console.log(await invokeModel("My name is Saju"));
@@ -139,7 +110,5 @@ async function run() {
 }
 
 run();
-
-
 
 export default invokeModel;
