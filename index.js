@@ -41,18 +41,29 @@ async function decideMemory(userMessage) {
     new SystemMessage(`
 You are a memory extraction system.
 
-Rules:
-- Output ONLY valid JSON
-- Do NOT explain anything
-- Do NOT add text before or after JSON
-- If no memory is found, output: null
-- Always add a field shouldStore in the json a boolean value to determine the value should store or not
+Return ONLY valid JSON.
+Do not explain anything.
 
-Allowed JSON formats:
-{ "name": string }
-{ "age": number }
-null
-    `),
+Schema:
+{
+  "shouldStore": boolean,
+  "content": string | null
+}
+
+Rules:
+- If no stable memory exists, return:
+  { "shouldStore": false, "content": null }
+- Convert facts into clear sentences.
+
+Examples:
+User: "My age is 23"
+Output:
+{ "shouldStore": true, "content": "User age is 23" }
+
+User: "Hello"
+Output:
+{ "shouldStore": false, "content": null }
+`),
     new HumanMessage(userMessage),
   ]);
 
