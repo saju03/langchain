@@ -1,2 +1,1 @@
-// EXT_PUBLIC_SUPABASE_URL=https://mhbpsolasnhvcfnsyann.supabase.co
-// NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=sb_publishable_wq7oxDjsAQVsE8braEp7rw_9BzJVxK3
+
