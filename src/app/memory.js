@@ -2,8 +2,9 @@ import { HumanMessage, SystemMessage } from "langchain";
 import { chatModel } from "../model/chatModel.js";
 import { vectorStore } from "../db/vectorStore.js";
 
-async function findSimilarMemory(text, threshold = 0.9) {
-  const results = await vectorStore.similaritySearchWithScore(text, 1);
+async function findSimilarMemory(text, metadata = {}, threshold = 0.9) {
+  const filter = metadata.user_id ? { user_id: metadata.user_id } : {};
+  const results = await vectorStore.similaritySearchWithScore(text, 1, filter);
   if (results.length === 0) return null;
 
   const [doc, score] = results[0];
@@ -52,16 +53,16 @@ Output:
   }
 }
 
-export async function maybeSaveToMemory(memory) {
+export async function maybeSaveToMemory(memory, metadata = {}) {
   if (!memory) return;
 
   const text = typeof memory === "string" ? memory : JSON.stringify(memory);
 
-  await saveToMemory(text);
+  await saveToMemory(text, metadata);
 }
 
 export async function saveToMemory(text, metadata = {}) {
-  const existing = await findSimilarMemory(text);
+  const existing = await findSimilarMemory(text, metadata);
 
   if (existing) {
     console.log("Updating existing memory");
@@ -78,22 +79,34 @@ export async function saveToMemory(text, metadata = {}) {
   }
 }
 
-export async function retrieveMemory(query) {
+export async function retrieveMemory(query,currentUserId) {
   const retriever = vectorStore.asRetriever(3);
-  return await retriever.invoke(query);
+  return await retriever.invoke(query,{
+  filter: {
+    user_id: currentUserId
+  }
+});
 }
 
-
-export async function retrieveRelevantMemories(
+export async function  retrieveRelevantMemories(
   vectorStore,
   userMessage,
+  currentUserId,
   limit = 3
 ) {
-  const results = await vectorStore.similaritySearch(userMessage, limit);
+  if (!currentUserId) return [];
 
-  if (!results.length) return "none";
+  console.log(`Retrieving memories for user ${currentUserId} with query: "${userMessage}"`);
 
-  return results
-    .map((r) => `• ${r.pageContent}`)
-    .join("\n");
+  const results = await vectorStore.similaritySearch(
+    userMessage,
+    limit,
+    {
+      user_id: currentUserId, // MUST be string
+    }
+  );
+
+  console.log("Retrieved memories:", results.map(r => r.pageContent));
+
+  return results;
 }
