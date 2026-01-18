@@ -1,5 +1,5 @@
 import { HumanMessage, SystemMessage } from "langchain";
-import { chatModel } from "../model/chatModel.js";
+import {  JSONModel } from "../model/chatModel.js";
 import { vectorStore } from "../db/vectorStore.js";
 
 async function findSimilarMemory(text, metadata = {}, threshold = 0.9) {
@@ -12,8 +12,9 @@ async function findSimilarMemory(text, metadata = {}, threshold = 0.9) {
 }
 
 export async function decideMemory(userMessage) {
-  const response = await chatModel.invoke([
-    new SystemMessage(`
+  try {
+    const response = await JSONModel.invoke([
+      new SystemMessage(`
 You are a memory extraction system.
 
 Return ONLY valid JSON.
@@ -26,8 +27,10 @@ Schema:
 }
 
 Rules:
+- Always return a valid JSON in the format specified above.
 - If no stable memory exists or contains not positive words like [not sure,unknown,i don't know,didn't say], return:
   { "shouldStore": false, "content": null }
+- Do not store questions asked by the user or the AI.
 - Convert facts into clear sentences.
 
 Examples:
@@ -43,14 +46,24 @@ User: "Hello"
 Output:
 { "shouldStore": false, "content": null }
 `),
-    new HumanMessage(userMessage),
-  ]);
+      new HumanMessage(userMessage),
+    ]);
+    
+    if (response.content) {
+      return JSON.parse(response.content);
+    }
+   
+    else {
+      return null;
+    }
 
-  try {
-    return JSON.parse(response.content);
-  } catch {
+  } catch (error) {
+    console.log(error);
     return null;
   }
+
+
+
 }
 
 export async function maybeSaveToMemory(memory, metadata = {}) {
@@ -79,16 +92,16 @@ export async function saveToMemory(text, metadata = {}) {
   }
 }
 
-export async function retrieveMemory(query,currentUserId) {
+export async function retrieveMemory(query, currentUserId) {
   const retriever = vectorStore.asRetriever(3);
-  return await retriever.invoke(query,{
-  filter: {
-    user_id: currentUserId
-  }
-});
+  return await retriever.invoke(query, {
+    filter: {
+      user_id: currentUserId
+    }
+  });
 }
 
-export async function  retrieveRelevantMemories(
+export async function retrieveRelevantMemories(
   vectorStore,
   userMessage,
   currentUserId,

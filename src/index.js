@@ -11,7 +11,7 @@ import { getUserMemories } from "./app/tools.js";
 
 
 
-const userId = "user_andmais";
+const userId = "user_new_sajuaa";
 const MAX_MESSAGES = 6; // 3 user + 3 AI      
 let sessionId = null;
 
@@ -37,37 +37,17 @@ if (!sessionId) {
 
 const invokeModel = async (userMessage) => {
   try {
+
+
+
+
+
     
-
-      const r = await chatModel.invoke(
-    'What do you remember about me?',
-    {
-      configurable: {
-        userId: userId,
-        sessionId: sessionId,
-      },
-    }
-  );
-  debugger
-if (r.tool_calls?.length) {
-  for (const call of r.tool_calls) {
-    if (call.name === "get_user_memories") {
-      const result = await getUserMemories.invoke(call.args);
-
-      console.log("Tool output:", result);
-    }
-  }
-}
-
-
-
-
-debugger
 
 
     // Decide whether to store long-term memory
     const memoryDecision = await decideMemory(userMessage);
-
+debugger
     if (memoryDecision?.shouldStore) {
       await maybeSaveToMemory(memoryDecision.content, {
         type: "user_memory",
@@ -75,19 +55,34 @@ debugger
       });
     }
 
+
+    // this section needs to be called form tool based model to work  
+let relevantMemories = [];
+    if (memoryDecision.toolCall?.length) {
+      for (const call of memoryDecision.toolCall) {
+        if (call.name === "get_user_memories") {
+          const result = await getUserMemories.invoke(call.args, { configurable: { userId } });
+          relevantMemories.push(result)
+
+          console.log("Tool output:", result);
+        }
+      }
+    }
+
     //  Retrieve relevant vector memories
-    const relevantMemories = await retrieveRelevantMemories(vectorStore, userMessage, userId);
+    // const relevantMemories = await retrieveRelevantMemories(vectorStore, userMessage, userId);
 
     //  Load recent session messages (WITHOUT current user message)
     const recentMessages = await loadRecentMessages(supabase, sessionId, MAX_MESSAGES);
 
     //  Build system prompt
     //  Build system prompt
-    const memoryText = relevantMemories.map((mem) => mem.pageContent).join("\n");
+    const memoryText = relevantMemories.map((mem) => `- ${mem.pageContent}`).join("\n");
     const systemPrompt = `You are a helpful chatbot.
-    Use the memory below ONLY if relevant.
-    Long-term memory:
-    ${memoryText}`;
+    Here are some things you know about the user from previous conversations:
+    ${memoryText}
+    
+    Use the above information to answer the user's question if relevant.`;
 
     const messages = [new SystemMessage(systemPrompt), ...recentMessages, new HumanMessage(userMessage)];
     //  Invoke model
@@ -104,15 +99,14 @@ debugger
 };
 
 async function run() {
-  console.log(await invokeModel("what is my name"));
-  // console.log(await invokeModel("my name is saju "));
-  // console.log(await invokeModel("My age is 20"));
-  // console.log(await invokeModel("My fav letter is v"));
-  // console.log(await invokeModel("My dog is too friendly"));
-  // console.log(await invokeModel("My dog is a labrador"));
-  // console.log(await invokeModel("My dog has a white tail and black body"));
+  console.log(await invokeModel("my name is saju "));
+  console.log(await invokeModel("My age is 20"));
+  console.log(await invokeModel("My fav letter is v"));
+  console.log(await invokeModel("My dog is too friendly"));
+  console.log(await invokeModel("My dog is a labrador"));
+  console.log(await invokeModel("My dog has a white tail and black body"));
 
-  // console.log(await invokeModel("What is my name?"));
+  // console.log(await invokeModel("What do you know about me"));
 }
 
 run();
