@@ -1,5 +1,5 @@
 import { HumanMessage, SystemMessage } from "langchain";
-import {  JSONModel } from "../model/chatModel.js";
+import {  JSONModel } from "../model/Model.js";
 import { vectorStore } from "../db/vectorStore.js";
 
 async function findSimilarMemory(text, metadata = {}, threshold = 0.9) {
